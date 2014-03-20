@@ -339,7 +339,7 @@ class Command(LabelCommand):
         fk_key, fk_field = foreignkey
         if fk_key and fk_field:
             try:
-                new_app_label = ContentType.objects.get(model=fk_key).app_label
+                new_app_label = ContentType.objects.get(model__iexact=fk_key).app_label
             except:
                 new_app_label = self.app_label
             fk_model = models.get_model(new_app_label, fk_key)
