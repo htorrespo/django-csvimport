@@ -80,9 +80,11 @@ class Command(LabelCommand):
         self.errors = []
         self.loglist = []
         self.mappings = []
+        self.custom_mappings = False
         self.defaults = []
         self.app_label = ''
         self.model = ''
+        self.fk_model = ''
         self.fieldmap = {}
         self.file_name = ''
         self.nameindexes = False
@@ -179,6 +181,20 @@ class Command(LabelCommand):
 
         if self.mappings:
             loglist.append('Using manually entered mapping list')
+
+            self.custom_mappings = True
+
+            for custom_mapping in self.mappings:
+                if custom_mapping[2]: # Non-foreign keys have None here
+                    fk_key = custom_mapping[2][0]
+                    required_fkey = custom_mapping[1]
+                    break # Assuming just one foreign key for now.  
+
+            try:
+                new_app_label = ContentType.objects.get(model__iexact=fk_key).app_label
+            except:
+                new_app_label = self.app_label
+            self.fk_model = models.get_model(new_app_label, fk_key)
         else:
             mappingstr = self.parse_header(self.csvfile[0])
             if mappingstr:
@@ -195,9 +211,11 @@ class Command(LabelCommand):
                 logger.info("Import %s %i", self.model.__name__, counter)
             counter += 1
 
-            model_instance = self.model()
-            model_instance.csvimport_id = csvimportid
+            if self.custom_mappings: # SVT: For now, assumed custom_mappings == has foreign key in the mappings.  Not really always true but good enough for now.
+                fk_model_instance = self.fk_model()
+                fk_model_instance.csvimport_id = csvimportid
 
+            model_instance = ''
 
             for (column, field, foreignkey) in self.mappings:
                 field_type = self.fieldmap.get(field).get_internal_type()
@@ -210,9 +228,6 @@ class Command(LabelCommand):
                     row[column] = row[column].strip()
                 except AttributeError:
                     pass
-
-                if foreignkey:
-                    row[column] = self.insert_fkey(foreignkey, row[column])
 
                 if self.debug:
                     loglist.append('%s.%s = "%s"' % (self.model.__name__,
@@ -245,17 +260,34 @@ class Command(LabelCommand):
                             loglist.append('Column %s = %s, less than zero so set to 0' \
                                                 % (field, row[column]))
                             row[column] = 0
-                try:
-                    model_instance.__setattr__(field, row[column])
-                except:
+                
+                if foreignkey:
+                    fk_key, fk_field = foreignkey
+                    fk_model_instance.__setattr__(fk_field, row[column])
+                else:
+
+                    if not model_instance:
+                        if self.custom_mappings:
+                            fk_model_instance.save()
+
+                        defaults = dict()
+                        defaults[required_fkey] = fk_model_instance
+                        model_instance = models.get_model(self.app_label, self.model.__name__)(**defaults)
+                        model_instance.csvimport_id = csvimportid
+
+
+                if model_instance:
                     try:
-                        row[column] = model_instance.getattr(field).to_python(row[column])
+                        model_instance.__setattr__(field, row[column])
                     except:
                         try:
-                            row[column] = datetime(row[column])
+                            row[column] = model_instance.getattr(field).to_python(row[column])
                         except:
-                            row[column] = None
-                            loglist.append('Column %s failed' % field)
+                            try:
+                                row[column] = datetime(row[column])
+                            except:
+                                row[column] = None
+                                loglist.append('Column %s failed' % field)
 
             if self.defaults:
                 for (field, value, foreignkey) in self.defaults:
@@ -329,30 +361,6 @@ class Command(LabelCommand):
         if mapping:
             return ','.join(mapping)
         return ''
-
-    def insert_fkey(self, foreignkey, rowcol):
-        """ Add fkey if not present
-            If there is corresponding data in the model already,
-            we do not need to add more, since we are dealing with
-            foreign keys, therefore foreign data
-        """
-        fk_key, fk_field = foreignkey
-        if fk_key and fk_field:
-            try:
-                new_app_label = ContentType.objects.get(model__iexact=fk_key).app_label
-            except:
-                new_app_label = self.app_label
-            fk_model = models.get_model(new_app_label, fk_key)
-            matches = fk_model.objects.filter(**{fk_field+'__exact':
-                                                 rowcol})
-
-            if not matches:
-                key = fk_model()
-                key.__setattr__(fk_field, rowcol)
-                key.save()
-
-            rowcol = fk_model.objects.filter(**{fk_field+'__exact': rowcol})[0]
-        return rowcol
 
     def error(self, message, type=1):
         """
