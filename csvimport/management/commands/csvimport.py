@@ -171,6 +171,8 @@ class Command(LabelCommand):
     def run(self, logid=0):
         """ Run the csvimport """
         loglist = []
+        importlist = []
+
         if self.nameindexes:
             indexes = self.csvfile.pop(0)
         counter = 0
@@ -333,6 +335,10 @@ class Command(LabelCommand):
             except OverflowError:
                 pass
 
+            # add pk to list if it saved properly
+            if model_instance.pk:
+                importlist.append(model_instance.pk)
+
             if CSVIMPORT_LOG == 'logger':
                 for line in loglist:
                     logger.info(line)
@@ -343,7 +349,8 @@ class Command(LabelCommand):
                           'import_user':'cron',
                           'upload_method':'cronjob',
                           'error_log':'\n'.join(loglist),
-                          'import_date':datetime.now()}
+                          'import_date':datetime.now(),
+                          'import_list':importlist}
             return self.loglist
         else:
             return ['No logging', ]
