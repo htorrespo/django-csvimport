@@ -25,6 +25,7 @@ FLOAT = ['DecimalField', 'FloatField']
 NUMERIC = INTEGER + FLOAT
 BOOLEAN = ['BooleanField', 'NullBooleanField']
 BOOLEAN_TRUE = [1, '1', 'Y', 'Yes', 'yes', 'True', 'true', 'T', 't']
+DATEFIELD = ['DateField', 'DateTimeField']
 # Note if mappings are manually specified they are of the following form ...
 # MAPPINGS = "column1=shared_code,column2=org(Organisation|name),column3=description"
 # statements = re.compile(r";[ \t]*$", re.M)
@@ -264,14 +265,16 @@ class Command(LabelCommand):
                             row[column] = 0
 
                 # Tidy up date data
-                if field_type == 'DateField':
+                if field_type in DATEFIELD:
                     from datetime import datetime
 
                     try:
                         row[column] = datetime.strptime(row[column], '%m/%d/%Y').strftime('%Y-%m-%d')
                     except ValueError:
-                        pass # SVT TODO: ADD MORE DATE FORMATS
-
+                        try:
+                            row[column] = datetime.strptime(row[column], '%m/%d/%y').strftime('%Y-%m-%d')
+                        except ValueError:
+                            pass
                 
                 if foreignkey:
                     fk_key, fk_field = foreignkey
