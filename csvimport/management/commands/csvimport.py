@@ -265,9 +265,14 @@ class Command(LabelCommand):
                             row[column] = 0
 
                 # Tidy up date data
-                #if field_type in DATEFIELD:
-                #    from datetime import datetime
+                if field_type in DATEFIELD:
+                    from datetime import datetime
 
+                    try:
+                        row[column] = datetime.strptime(row[column], '%Y-%m-%d')
+                    except:
+                        row[column] = None
+                        
                 #    try:
                 #        row[column] = datetime.strptime(row[column], '%m/%d/%Y').strftime('%Y-%m-%d')
                 #    except ValueError:
