@@ -274,7 +274,7 @@ class Command(LabelCommand):
                         try:
                             row[column] = datetime.strptime(row[column], '%m/%d/%y').strftime('%Y-%m-%d')
                         except ValueError:
-                            pass
+                            row[column] = datetime.now().strftime('%Y-%m-%d') # Start Today
                 
                 if foreignkey:
                     fk_key, fk_field = foreignkey
