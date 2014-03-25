@@ -265,16 +265,16 @@ class Command(LabelCommand):
                             row[column] = 0
 
                 # Tidy up date data
-                if field_type in DATEFIELD:
-                    from datetime import datetime
+                #if field_type in DATEFIELD:
+                #    from datetime import datetime
 
-                    try:
-                        row[column] = datetime.strptime(row[column], '%m/%d/%Y').strftime('%Y-%m-%d')
-                    except ValueError:
-                        try:
-                            row[column] = datetime.strptime(row[column], '%m/%d/%y').strftime('%Y-%m-%d')
-                        except ValueError:
-                            row[column] = datetime.now().strftime('%Y-%m-%d') # Start Today
+                #    try:
+                #        row[column] = datetime.strptime(row[column], '%m/%d/%Y').strftime('%Y-%m-%d')
+                #    except ValueError:
+                #        try:
+                #            row[column] = datetime.strptime(row[column], '%m/%d/%y').strftime('%Y-%m-%d')
+                #        except ValueError:
+                #            row[column] = datetime.now().strftime('%Y-%m-%d') # Start Today
                 
                 if foreignkey:
                     fk_key, fk_field = foreignkey
