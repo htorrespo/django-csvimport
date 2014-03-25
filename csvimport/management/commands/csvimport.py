@@ -262,6 +262,16 @@ class Command(LabelCommand):
                             loglist.append('Column %s = %s, less than zero so set to 0' \
                                                 % (field, row[column]))
                             row[column] = 0
+
+                # Tidy up date data
+                if field_type == 'DateField':
+                    from datetime import datetime
+
+                    try:
+                        row[column] = datetime.strptime(row[column], '%m/%d/%Y').strftime('%Y-%m-%d')
+                    except ValueError:
+                        pass # SVT TODO: ADD MORE DATE FORMATS
+
                 
                 if foreignkey:
                     fk_key, fk_field = foreignkey
