@@ -386,7 +386,7 @@ class Command(LabelCommand):
                             matchdict[foreignkey[1] + '__exact'] = related_model_fields[field]
 
                 try:
-                    related_model_instance, created = self.fk_model.get_or_create(**matchdict)
+                    related_model_instance, created = self.fk_model.objects.get_or_create(**matchdict)
                 except DatabaseError, err:
                     loglist.append('Database Error: {0}'.format(err))
 
@@ -429,7 +429,7 @@ class Command(LabelCommand):
                         matchdict[field + '__exact'] = main_model_fields[field]
 
                 try:
-                    model_instance, created = self.model.get_or_create(**matchdict)
+                    model_instance, created = self.model.objects.get_or_create(**matchdict)
                 except DatabaseError, err:
                     loglist.append('Database Error: {0}'.format(err))
 
