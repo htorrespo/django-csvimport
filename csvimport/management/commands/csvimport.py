@@ -429,6 +429,7 @@ class Command(LabelCommand):
                     pk=model_instance.pk,
                     **main_model_fields
                 )
+                model_instance.save()
             else:
                 # Now check main model
                 if self.deduplicate:
