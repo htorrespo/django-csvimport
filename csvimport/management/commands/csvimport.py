@@ -412,6 +412,8 @@ class Command(LabelCommand):
             # the correct related_model_instance
             if self.fk_field:
                 main_model_fields[self.fk_field] = related_model_instance
+            else:
+                raise Exception('No fk_field is set.')
 
             # Now check main model
             if self.deduplicate:
