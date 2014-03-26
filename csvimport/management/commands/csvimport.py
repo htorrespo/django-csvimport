@@ -569,7 +569,7 @@ class Command(LabelCommand):
                 # * indicates that this model field should be used for
                 # deduplication
                 if mappings[mapp][0].startswith('*'):
-                    mappings[mapp][0] = mappings.[mapp][0][1:]
+                    mappings[mapp][0] = mappings[mapp][0][1:]
 
                     related_field = mappings[mapp][2]
 
