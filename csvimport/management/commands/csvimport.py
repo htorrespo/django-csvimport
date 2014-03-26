@@ -424,7 +424,6 @@ class Command(LabelCommand):
                 query[self.fk_field] = related_model_instance
                 model_instance = self.model.objects.get(**query)
                 # remove the related model since we already have it
-                del main_model_fields[self.fk_field]
                 model_instance = self.model(
                     pk=model_instance.pk,
                     **main_model_fields
