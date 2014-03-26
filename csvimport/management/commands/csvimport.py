@@ -85,13 +85,17 @@ class Command(LabelCommand):
         self.defaults = []
         self.app_label = ''
         self.model = ''
+        self.model_name = ''
         self.fk_model = ''
+        self.fk_field = None
         self.fieldmap = {}
         self.file_name = ''
         self.nameindexes = False
         self.deduplicate = True
         self.csvfile = []
         self.charset = ''
+        self.unique_fields = list()
+        self.unique_related_fields = list()
 
     def handle_label(self, label, **options):
         """ Handle the circular reference by passing the nested
@@ -120,23 +124,36 @@ class Command(LabelCommand):
               uploaded=None, nameindexes=False, deduplicate=True):
         """ Setup up the attributes for running the import """
         self.defaults = self.__mappings(defaults)
+        
+        # Retrieve the app label and model name
         if modelname.find('.') > -1:
             app_label, model = modelname.split('.')
+
+        # Get the model itself
+        self.model_name = model
         self.charset = charset
         self.app_label = app_label
         self.model = models.get_model(app_label, model)
+
+        # Construct the field map of the main model
         for field in self.model._meta.fields:
             self.fieldmap[field.name] = field
             if field.__class__ == models.ForeignKey:
                 self.fieldmap[field.name+"_id"] = field
+
+        # If we have custom mappings, determine the format
         if mappings:
             # Test for column=name or just name list format
             if mappings.find('=') == -1:
                 mappings = self.parse_header(mappings.split(','))
             self.mappings = self.__mappings(mappings)
+
+        # Store additional settings
         self.nameindexes = bool(nameindexes)
         self.file_name = csvfile
         self.deduplicate = deduplicate
+
+        # Retrieve file
         if uploaded:
             self.csvfile = self.__csvfile(uploaded.path)
         else:
@@ -174,14 +191,20 @@ class Command(LabelCommand):
         loglist = []
         importlist = []
 
+        # If we have named indexes, assume the first
+        # row of the csv is a header
         if self.nameindexes:
             indexes = self.csvfile.pop(0)
         counter = 0
+
+        # Set the import id if present
         if logid:
             csvimportid = logid
         else:
             csvimportid = 0
 
+        # If we are using custom mapings, retrieve any related models
+        # Only one related model is currently supported
         if self.mappings:
             loglist.append('Using manually entered mapping list')
 
@@ -193,45 +216,61 @@ class Command(LabelCommand):
                     required_fkey = custom_mapping[1]
                     break # Assuming just one foreign key for now.  
 
+            # Get the related model appp label, if different
             try:
                 new_app_label = ContentType.objects.get(model__iexact=fk_key).app_label
             except:
                 new_app_label = self.app_label
+
+            # Store the related model itself
             self.fk_model = models.get_model(new_app_label, fk_key)
+
+        # No custom mappings, so retrieve the mappings from the first row
+        # of the csv file
         else:
             mappingstr = self.parse_header(self.csvfile[0])
             if mappingstr:
                 loglist.append('Using mapping from first row of CSV file')
                 self.mappings = self.__mappings(mappingstr)
+
+        # If neither method worked, return an error
         if not self.mappings:
             loglist.append('''No fields in the CSV file match %s.%s\n
                                    - you must add a header field name row
                                    to the CSV file or supply a mapping list''' %
                                 (self.model._meta.app_label, self.model.__name__))
             return loglist
+
+        # Process each additional row in the file
         for row in self.csvfile[1:]:
+            # Update the logger
             if CSVIMPORT_LOG == 'logger':
                 logger.info("Import %s %i", self.model.__name__, counter)
             counter += 1
 
-            if self.custom_mappings: # SVT: For now, assumed custom_mappings == has foreign key in the mappings.  Not really always true but good enough for now.
-                fk_model_instance = self.fk_model()
-                fk_model_instance.csvimport_id = csvimportid
+            model_instance = None
+            main_model_fields = dict()
+            related_model_instance = None
+            related_model_fields = dict()
 
-            model_instance = ''
-
+            # process each field in the mappings
             for (column, field, foreignkey) in self.mappings:
                 field_type = self.fieldmap.get(field).get_internal_type()
+
+                # either proceed in order or use the indexes to find
+                # the right column
                 if self.nameindexes:
                     column = indexes.index(column)
                 else:
                     column = int(column)-1
 
+                # Strip out unecessary spaces if needed
                 try:
                     row[column] = row[column].strip()
                 except AttributeError:
                     pass
 
+                # Log this mapping
                 if self.debug:
                     loglist.append('%s.%s = "%s"' % (self.model.__name__,
                                                           field, row[column]))
@@ -264,7 +303,7 @@ class Command(LabelCommand):
                                                 % (field, row[column]))
                             row[column] = 0
 
-                # Tidy up date data
+                # Tidy up date data, for now only accepting 'YYYY-MM-DD' format
                 if field_type in DATEFIELD:
                     from datetime import datetime
 
@@ -281,77 +320,135 @@ class Command(LabelCommand):
                 #        except ValueError:
                 #            row[column] = datetime.now().strftime('%Y-%m-%d') # Start Today
                 
+                # Store the value in the appropriate field dictionary
                 if foreignkey:
-                    fk_key, fk_field = foreignkey
-                    fk_model_instance.__setattr__(fk_field, row[column])
+                    related_model, related_field = foreignkey
+                    related_model_fields[related_field] = row[column]
+                    self.fk_field = field
                 else:
+                    main_model_fields[field] = row[column]
 
-                    if not model_instance:
-                        if self.custom_mappings:
-                            fk_model_instance.save()
+                #if foreignkey:
+                #    fk_key, fk_field = foreignkey
+                #    fk_model_instance.__setattr__(fk_field, row[column])
+                #else:
+                #    if not model_instance:
+                #        if self.custom_mappings:
+                #            fk_model_instance.save()
 
-                        defaults = dict()
-                        defaults[required_fkey] = fk_model_instance
-                        model_instance = models.get_model(self.app_label, self.model.__name__)(**defaults)
-                        model_instance.csvimport_id = csvimportid
+                #        defaults = dict()
+                #        defaults[required_fkey] = fk_model_instance
+                #        model_instance = models.get_model(self.app_label, self.model.__name__)(**defaults)
+                #        model_instance.csvimport_id = csvimportid
 
 
-                if model_instance:
-                    try:
-                        model_instance.__setattr__(field, row[column])
-                    except:
-                        try:
-                            row[column] = model_instance.getattr(field).to_python(row[column])
-                        except:
-                            try:
-                                row[column] = datetime(row[column])
-                            except:
-                                row[column] = None
-                                loglist.append('Column %s failed' % field)
+                #if model_instance:
+                #    try:
+                #        model_instance.__setattr__(field, row[column])
+                #    except:
+                #        try:
+                #            row[column] = model_instance.getattr(field).to_python(row[column])
+                #        except:
+                #            try:
+                #                row[column] = datetime(row[column])
+                #            except:
+                #                row[column] = None
+                #                loglist.append('Column %s failed' % field)
 
-            if self.defaults:
-                for (field, value, foreignkey) in self.defaults:
-                    try:
-                        done = model_instance.getattr(field)
-                    except:
-                        done = False
-                    if not done:
-                        if foreignkey:
-                            value = self.insert_fkey(foreignkey, value)
-                        model_instance.__setattr__(field, value)
+            #if self.defaults:
+            #    for (field, value, foreignkey) in self.defaults:
+            #        try:
+            #            done = model_instance.getattr(field)
+            #        except:
+            #            done = False
+            #        if not done:
+            #            if foreignkey:
+            #                value = self.insert_fkey(foreignkey, value)
+            #            model_instance.__setattr__(field, value)
+
+            # Send presave signal
+            importing_csv.send(sender=model_instance,
+                                    row=dict(zip(self.csvfile[:1][0], row)))
+
+            # First the related model
             if self.deduplicate:
                 matchdict = {}
-                for (column, field, foreignkey) in self.mappings:
-                    matchdict[field + '__exact'] = getattr(model_instance,
-                                                           field, None)
+                full_match = True
+
+                # Start with related model
+                if len(self.unique_related_fields) > 0:
+                    full_match = False
+                    for field in self.unique_related_fields:
+                        matchdict[field + '__exact'] = related_model_fields[field]                   
+                else: # Match on all foreign key fields
+                    for (column, field, foreignkey) in self.mappings:
+                        if foreignkey:
+                            matchdict[foreignkey[1] + '__exact'] = related_model_fields[field]
+
                 try:
-                    self.model.objects.get(**matchdict)
-                    continue
-                except ObjectDoesNotExist:
-                    pass
-                except OverflowError:
-                    pass
+                    related_model_instance, created = self.related_model.get_or_create(**matchdict)
+                except DatabaseError, err:
+                    loglist.append('Database Error: {0}'.format(err))
+
+                # If we only matched on a subset of fields, we need
+                # to update the model with the other fields
+                if related_model_instance and not full_match:
+                    related_model_instance = self.related_model(
+                        pk=related_model_instance.pk,
+                        **related_model_fields
+                    )
+            else:
+                related_model_instance = self.related_model(**related_model_fields)
+
+            # Store the import id for later and save the model
+            related_model_instance.csvimport_id = csvimportid
+
             try:
-
-                importing_csv.send(sender=model_instance,
-                                    row=dict(zip(self.csvfile[:1][0], row)))
-                model_instance.save()
-                imported_csv.send(sender=model_instance,
-                                  row=dict(zip(self.csvfile[:1][0], row)))
-
+                related_model_instance.save()
             except DatabaseError, err:
+                loglist.append('Database Error: {0}'.format(err))
+
+            # Ensure that the foreign key field is populated with
+            # the correct related_model_instance
+            if self.fk_field:
+                main_model_fields[self.fk_field] = related_model_instance
+
+            # Now check main model
+            if self.deduplicate:
+                matchdict = {}
+                full_match = True
+
+                # if we have unique fields, use only those for matching,
+                # otherwise use all fields
+                if len(self.unique_fields) > 0:
+                    full_match = False
+                    for field in self.unique_fields:
+                        matchdict[field + '__exact'] = main_model_fields[field]
+                else: # Match on all fields
+                    for (column, field, foreignkey) in self.mappings:
+                        matchdict[field + '__exact'] = main_model_fields[field]
+
                 try:
-                    error_number, error_message = err
-                except:
-                    error_message = err
-                    error_number = 0
-                # Catch duplicate key error.
-                if error_number != 1062:
-                    loglist.append(
-                        'Database Error: %s, Number: %d' % (error_message,
-                                                            error_number))
-            except OverflowError:
-                pass
+                    model_instance, created = self.model.get_or_create(**matchdict)
+                except DatabaseError, err:
+                    loglist.append('Database Error: {0}'.format(err))
+
+                if model_instance and not full_match:
+                    model_instance = self.model(pk=model_instance.pk, **main_model_fields)
+            else:
+                model_instance = self.model(**main_model_fields)
+
+            # Save the model
+            model_instance.csvimport_id = csvimportid
+            
+            try:
+                model_instance.save()
+            except DatabaseError, err:
+                loglist.append('Database Error: {0}'.format(err))
+
+            # Send post-save signal    
+            imported_csv.send(sender=model_instance,
+                              row=dict(zip(self.csvfile[:1][0], row)))
 
             # add pk to list if it saved properly
             if model_instance.pk:
@@ -360,8 +457,10 @@ class Command(LabelCommand):
             if CSVIMPORT_LOG == 'logger':
                 for line in loglist:
                     logger.info(line)
+
             self.loglist.extend(loglist)
             loglist = []
+
         if self.loglist:
             self.props = {'file_name':self.file_name,
                           'import_user':'cron',
@@ -450,16 +549,35 @@ class Command(LabelCommand):
 
             >>> parse_mapping('a=b(c|d)')
             [('a', 'b', '(c|d)')]
+
+            * indicates that this field should be used for deduplication
+
             """
 
-            pattern = re.compile(r'(\w+)=(\w+)(\(\w+\|\w+\))?')
+            pattern = re.compile(r'(\*?\w+)=(\w+)(\(\w+\|\w+\))?')
             mappings = pattern.findall(args)
 
             mappings = list(mappings)
             for mapping in mappings:
                 mapp = mappings.index(mapping)
+
                 mappings[mapp] = list(mappings[mapp])
+
+                # parse foreign key component
                 mappings[mapp][2] = parse_foreignkey(mapping[2])
+
+                # * indicates that this model field should be used for
+                # deduplication
+                if mappings[mapp][0].startswith('*'):
+                    mappings[mapp][0] = mappings.[mapp][0][1:]
+
+                    related_field = mappings[mapp][2]
+
+                    if related_field:
+                        self.unique_related_fields.append(related_field[1])
+                    else:
+                        self.unique_fields.append(mappings[mapp][1])
+
                 mappings[mapp] = tuple(mappings[mapp])
             mappings = list(mappings)
             
