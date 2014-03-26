@@ -379,11 +379,11 @@ class Command(LabelCommand):
                 if len(self.unique_related_fields) > 0:
                     full_match = False
                     for field in self.unique_related_fields:
-                        matchdict[field + '__exact'] = related_model_fields[field]                   
+                        matchdict[field] = related_model_fields[field]                   
                 else: # Match on all foreign key fields
                     for (column, field, foreignkey) in self.mappings:
                         if foreignkey:
-                            matchdict[foreignkey[1] + '__exact'] = related_model_fields[field]
+                            matchdict[foreignkey[1]] = related_model_fields[field]
 
                 #try:
                 related_model_instance, created = self.fk_model.objects.get_or_create(**matchdict)
@@ -425,10 +425,10 @@ class Command(LabelCommand):
                 if len(self.unique_fields) > 0:
                     full_match = False
                     for field in self.unique_fields:
-                        matchdict[field + '__exact'] = main_model_fields[field]
+                        matchdict[field] = main_model_fields[field]
                 else: # Match on all fields
                     for (column, field, foreignkey) in self.mappings:
-                        matchdict[field + '__exact'] = main_model_fields[field]
+                        matchdict[field] = main_model_fields[field]
 
                 #try:
                 model_instance, created = self.model.objects.get_or_create(**matchdict)
