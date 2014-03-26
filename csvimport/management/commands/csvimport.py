@@ -385,10 +385,10 @@ class Command(LabelCommand):
                         if foreignkey:
                             matchdict[foreignkey[1] + '__exact'] = related_model_fields[field]
 
-                try:
-                    related_model_instance, created = self.fk_model.objects.get_or_create(**matchdict)
-                except DatabaseError, err:
-                    loglist.append('Database Error: {0}'.format(err))
+                #try:
+                related_model_instance, created = self.fk_model.objects.get_or_create(**matchdict)
+                #except DatabaseError, err:
+                #    loglist.append('Database Error: {0}'.format(err))
 
                 # If we only matched on a subset of fields, we need
                 # to update the model with the other fields
@@ -428,10 +428,10 @@ class Command(LabelCommand):
                     for (column, field, foreignkey) in self.mappings:
                         matchdict[field + '__exact'] = main_model_fields[field]
 
-                try:
-                    model_instance, created = self.model.objects.get_or_create(**matchdict)
-                except DatabaseError, err:
-                    loglist.append('Database Error: {0}'.format(err))
+                #try:
+                model_instance, created = self.model.objects.get_or_create(**matchdict)
+                #except DatabaseError, err:
+                #    loglist.append('Database Error: {0}'.format(err))
 
                 if model_instance and not full_match:
                     model_instance = self.model(pk=model_instance.pk, **main_model_fields)
