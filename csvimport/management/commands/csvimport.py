@@ -386,7 +386,7 @@ class Command(LabelCommand):
                             matchdict[foreignkey[1]] = related_model_fields[field]
 
                 #try:
-                related_model_instance, created = self.fk_model.objects.get_or_create(**matchdict)
+                related_model_instance, related_model_created = self.fk_model.objects.get_or_create(**matchdict)
                 #except DatabaseError, err:
                 #    loglist.append('Database Error: {0}'.format(err))
 
@@ -398,6 +398,7 @@ class Command(LabelCommand):
                         **related_model_fields
                     )
             else:
+                related_model_created = True
                 related_model_instance = self.fk_model(**related_model_fields)
 
             # Store the import id for later and save the model
@@ -415,30 +416,46 @@ class Command(LabelCommand):
             else:
                 raise Exception('No fk_field is set.')
 
-            # Now check main model
-            if self.deduplicate:
-                matchdict = {}
-                full_match = True
-
-                # if we have unique fields, use only those for matching,
-                # otherwise use all fields
-                if len(self.unique_fields) > 0:
-                    full_match = False
-                    for field in self.unique_fields:
-                        matchdict[field] = main_model_fields[field]
-                else: # Match on all fields
-                    for (column, field, foreignkey) in self.mappings:
-                        matchdict[field] = main_model_fields[field]
-
-                #try:
-                model_instance, created = self.model.objects.get_or_create(**matchdict)
-                #except DatabaseError, err:
-                #    loglist.append('Database Error: {0}'.format(err))
-
-                if model_instance and not full_match:
-                    model_instance = self.model(pk=model_instance.pk, **main_model_fields)
+            # If the related model already exists
+            # get the associated main model instead of creating it
+            # then update with new values
+            if not related_model_created:
+                query = dict()
+                query[self.fk_field] = related_model_instance
+                model_instance = self.model.objects.get(**query)
+                # remove the related model since we already have it
+                del main_model_fields[self.fk_field]
+                model_instance = self.model(
+                    pk=model_instance.pk,
+                    **main_model_fields
+                )
             else:
-                model_instance = self.model(**main_model_fields)
+                # Now check main model
+                if self.deduplicate:
+                    matchdict = {}
+                    full_match = True
+
+                    # if we have unique fields, use only those for matching,
+                    # otherwise use all fields
+                    if len(self.unique_fields) > 0:
+                        full_match = False
+                        for field in self.unique_fields:
+                            matchdict[field] = main_model_fields[field]
+                    else: # Match on all fields
+                        for (column, field, foreignkey) in self.mappings:
+                            matchdict[field] = main_model_fields[field]
+
+                    #try:
+                    model_instance, created = self.model.objects.get_or_create(**matchdict)
+                    #except DatabaseError, err:
+                    #    loglist.append('Database Error: {0}'.format(err))
+
+                    if model_instance and not full_match:
+                        model_instance = self.model(pk=model_instance.pk, **main_model_fields)
+                else:
+                    model_instance = self.model(**main_model_fields)
+
+
 
             # Save the model
             model_instance.csvimport_id = csvimportid
