@@ -386,19 +386,19 @@ class Command(LabelCommand):
                             matchdict[foreignkey[1] + '__exact'] = related_model_fields[field]
 
                 try:
-                    related_model_instance, created = self.related_model.get_or_create(**matchdict)
+                    related_model_instance, created = related_model.get_or_create(**matchdict)
                 except DatabaseError, err:
                     loglist.append('Database Error: {0}'.format(err))
 
                 # If we only matched on a subset of fields, we need
                 # to update the model with the other fields
                 if related_model_instance and not full_match:
-                    related_model_instance = self.related_model(
+                    related_model_instance = related_model(
                         pk=related_model_instance.pk,
                         **related_model_fields
                     )
             else:
-                related_model_instance = self.related_model(**related_model_fields)
+                related_model_instance = related_model(**related_model_fields)
 
             # Store the import id for later and save the model
             related_model_instance.csvimport_id = csvimportid
