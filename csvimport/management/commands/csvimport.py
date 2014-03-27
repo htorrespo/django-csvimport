@@ -434,6 +434,8 @@ class Command(LabelCommand):
                 model_instance.save()
             except self.model.DoesNotExist:
                 model_instance = None
+            except self.model.MultipleObjectsReturned:
+                model_instance = self.model.objects.filter(**query)[0]
 
             if not model_instance:
                 # Now check main model
