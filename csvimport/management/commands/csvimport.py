@@ -391,6 +391,8 @@ class Command(LabelCommand):
                 except self.fk_model.DoesNotExist:
                     related_model_instance = self.fk_model(**related_model_fields)
                     related_model_created = True
+                except self.fk_model.MultipleObjectsReturned:
+                    related_model_instance = self.fk_model.objects.filter(**matchdict)[0]
 
                 # If we only matched on a subset of fields, we need
                 # to update the model with the other fields
