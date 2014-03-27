@@ -385,14 +385,16 @@ class Command(LabelCommand):
                         if foreignkey:
                             matchdict[foreignkey[1]] = related_model_fields[field]
 
-                #try:
-                related_model_instance, related_model_created = self.fk_model.objects.get_or_create(**matchdict)
-                #except DatabaseError, err:
-                #    loglist.append('Database Error: {0}'.format(err))
+                related_model_created = False
+                try:
+                    related_model_instance = self.fk_model.objects.get(**matchdict)
+                except self.fk_model.DoesNotExist:
+                    related_model_instance = self.fk_model(**related_model_fields)
+                    related_model_created = True
 
                 # If we only matched on a subset of fields, we need
                 # to update the model with the other fields
-                if related_model_instance and not full_match:
+                if not related_model_created:
                     related_model_instance = self.fk_model(
                         pk=related_model_instance.pk,
                         **related_model_fields
@@ -422,14 +424,18 @@ class Command(LabelCommand):
             if not related_model_created:
                 query = dict()
                 query[self.fk_field] = related_model_instance
+
+            try:
                 model_instance = self.model.objects.get(**query)
-                # remove the related model since we already have it
                 model_instance = self.model(
                     pk=model_instance.pk,
                     **main_model_fields
                 )
                 model_instance.save()
-            else:
+            except self.model.DoesNotExist:
+                model_instance = None
+
+            if not model_instance:
                 # Now check main model
                 if self.deduplicate:
                     matchdict = {}
@@ -445,17 +451,17 @@ class Command(LabelCommand):
                         for (column, field, foreignkey) in self.mappings:
                             matchdict[field] = main_model_fields[field]
 
-                    #try:
-                    model_instance, created = self.model.objects.get_or_create(**matchdict)
-                    #except DatabaseError, err:
-                    #    loglist.append('Database Error: {0}'.format(err))
+                    created = False
+                    try:
+                        model_instance = self.model.objects.get(**matchdict)
+                    except self.model.DoesNotExist:
+                        model_instance = self.model(**main_model_fields)
+                        created = True
 
-                    if model_instance and not full_match:
+                    if not created:
                         model_instance = self.model(pk=model_instance.pk, **main_model_fields)
                 else:
                     model_instance = self.model(**main_model_fields)
-
-
 
             # Save the model
             model_instance.csvimport_id = csvimportid
