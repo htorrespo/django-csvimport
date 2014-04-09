@@ -427,17 +427,17 @@ class Command(LabelCommand):
                 query = dict()
                 query[self.fk_field] = related_model_instance
 
-            try:
-                model_instance = self.model.objects.get(**query)
-                model_instance = self.model(
-                    pk=model_instance.pk,
-                    **main_model_fields
-                )
-                model_instance.save()
-            except self.model.DoesNotExist:
-                model_instance = None
-            except self.model.MultipleObjectsReturned:
-                model_instance = self.model.objects.filter(**query)[0]
+                try:
+                    model_instance = self.model.objects.get(**query)
+                    model_instance = self.model(
+                        pk=model_instance.pk,
+                        **main_model_fields
+                    )
+                    model_instance.save()
+                except self.model.DoesNotExist:
+                    model_instance = None
+                except self.model.MultipleObjectsReturned:
+                    model_instance = self.model.objects.filter(**query)[0]
 
             if not model_instance:
                 # Now check main model
