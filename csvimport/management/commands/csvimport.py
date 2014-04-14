@@ -491,6 +491,7 @@ class Command(LabelCommand):
             loglist = []
 
         if self.loglist:
+            from datetime import datetime
             self.props = {'file_name':self.file_name,
                           'import_user':'cron',
                           'upload_method':'cronjob',
