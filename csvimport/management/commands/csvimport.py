@@ -370,6 +370,8 @@ class Command(LabelCommand):
             importing_csv.send(sender=model_instance,
                                     row=dict(zip(self.csvfile[:1][0], row)))
 
+            related_model_saved = False
+
             # First the related model
             if self.deduplicate:
                 matchdict = {}
@@ -391,6 +393,11 @@ class Command(LabelCommand):
                 except self.fk_model.DoesNotExist:
                     related_model_instance = self.fk_model(**related_model_fields)
                     related_model_created = True
+                    try:
+                        related_model_instance.save()
+                        related_model_saved = True
+                    except DatabaseError, err:
+                        loglist.append('Database Error: {0}'.format(err))
                 except self.fk_model.MultipleObjectsReturned:
                     related_model_instance = self.fk_model.objects.filter(**matchdict)[0]
 
@@ -401,17 +408,28 @@ class Command(LabelCommand):
                         pk=related_model_instance.pk,
                         **related_model_fields
                     )
+                    try:
+                        related_model_instance.save(update_fields=related_model_fields.keys())
+                        related_model_saved = True
+                    except DatabaseError, err:
+                        loglist.append('Database Error: {0}'.format(err))
             else:
                 related_model_created = True
                 related_model_instance = self.fk_model(**related_model_fields)
+                try:
+                    related_model_instance.save()
+                    related_model_saved = True
+                except DatabaseError, err:
+                    loglist.append('Database Error: {0}'.format(err))
 
             # Store the import id for later and save the model
             related_model_instance.csvimport_id = csvimportid
 
-            try:
-                related_model_instance.save()
-            except DatabaseError, err:
-                loglist.append('Database Error: {0}'.format(err))
+            if not related_model_saved:
+                try:
+                    related_model_instance.save()
+                except DatabaseError, err:
+                    loglist.append('Database Error: {0}'.format(err))
 
             # Ensure that the foreign key field is populated with
             # the correct related_model_instance
