@@ -13,6 +13,8 @@ from optparse import make_option
 from django.db import models
 from django.contrib.contenttypes.models import ContentType
 
+# import pdb
+
 from django.conf import settings
 CSVIMPORT_LOG = getattr(settings, 'CSVIMPORT_LOG', 'screen')
 if CSVIMPORT_LOG == 'logger':
@@ -321,12 +323,13 @@ class Command(LabelCommand):
                 #            row[column] = datetime.now().strftime('%Y-%m-%d') # Start Today
                 
                 # Store the value in the appropriate field dictionary
-                if foreignkey:
-                    related_model, related_field = foreignkey
-                    related_model_fields[related_field] = row[column]
-                    self.fk_field = field
-                else:
-                    main_model_fields[field] = row[column]
+                if row[column] != '':
+                    if foreignkey:
+                        related_model, related_field = foreignkey
+                        related_model_fields[related_field] = row[column]
+                        self.fk_field = field
+                    else:
+                        main_model_fields[field] = row[column]
 
                 #if foreignkey:
                 #    fk_key, fk_field = foreignkey
@@ -451,7 +454,13 @@ class Command(LabelCommand):
                         pk=model_instance.pk,
                         **main_model_fields
                     )
-                    model_instance.save()
+                    
+                    update_fields = []
+                    for one_mapping in main_model_fields.keys():
+                        update_fields.append(one_mapping)
+        
+                    model_instance.save(update_fields=update_fields)
+                    model_instance = self.model.objects.get(pk=model_instance.pk)
                 except self.model.DoesNotExist:
                     model_instance = None
                 except self.model.MultipleObjectsReturned:
