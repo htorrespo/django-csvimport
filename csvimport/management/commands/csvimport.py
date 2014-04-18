@@ -477,10 +477,16 @@ class Command(LabelCommand):
                     if len(self.unique_fields) > 0:
                         full_match = False
                         for field in self.unique_fields:
-                            matchdict[field] = main_model_fields[field]
+                            try:
+                                matchdict[field] = main_model_fields[field]
+                            except KeyError:
+                                pass
                     else: # Match on all fields
                         for (column, field, foreignkey) in self.mappings:
-                            matchdict[field] = main_model_fields[field]
+                            try:
+                                matchdict[field] = main_model_fields[field]
+                            except KeyError:
+                                pass
 
                     created = False
                     try:
