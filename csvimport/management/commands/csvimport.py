@@ -335,8 +335,9 @@ class Command(LabelCommand):
             #            model_instance.__setattr__(field, value)
 
             # Send presave signal
-            importing_csv.send(sender=model_instance,
-                                    row=dict(zip(self.csvfile[:1][0], row)))
+            importing_csv.send(sender=self.model,
+                               instance=model_instance,
+                               row=dict(zip(self.csvfile[:1][0], row)))
 
             related_model_saved = False
 
@@ -411,11 +412,11 @@ class Command(LabelCommand):
 
             # No main model was found for the existing related model instance,
             # or the related_model instance was new
+            created = False
             if not model_instance:
                 if self.deduplicate:
                     matchdict = {}
                     full_match = True
-                    created = False
 
                     # if we have unique fields, use only those for matching,
                     # otherwise use all fields
@@ -454,7 +455,9 @@ class Command(LabelCommand):
                 loglist.append('Database Error: {0}'.format(err))
 
             # Send post-save signal    
-            imported_csv.send(sender=model_instance,
+            imported_csv.send(sender=self.model,
+                              created=created,
+                              instance=model_instance,
                               row=dict(zip(self.csvfile[:1][0], row)))
 
             # add pk to list if it saved properly
