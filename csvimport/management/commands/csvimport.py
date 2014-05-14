@@ -313,14 +313,6 @@ class Command(LabelCommand):
                         row[column] = datetime.strptime(row[column], '%Y-%m-%d')
                     except:
                         row[column] = None
-                        
-                #    try:
-                #        row[column] = datetime.strptime(row[column], '%m/%d/%Y').strftime('%Y-%m-%d')
-                #    except ValueError:
-                #        try:
-                #            row[column] = datetime.strptime(row[column], '%m/%d/%y').strftime('%Y-%m-%d')
-                #        except ValueError:
-                #            row[column] = datetime.now().strftime('%Y-%m-%d') # Start Today
                 
                 # Store the value in the appropriate field dictionary
                 if row[column] != '':
@@ -330,33 +322,6 @@ class Command(LabelCommand):
                         self.fk_field = field
                     else:
                         main_model_fields[field] = row[column]
-
-                #if foreignkey:
-                #    fk_key, fk_field = foreignkey
-                #    fk_model_instance.__setattr__(fk_field, row[column])
-                #else:
-                #    if not model_instance:
-                #        if self.custom_mappings:
-                #            fk_model_instance.save()
-
-                #        defaults = dict()
-                #        defaults[required_fkey] = fk_model_instance
-                #        model_instance = models.get_model(self.app_label, self.model.__name__)(**defaults)
-                #        model_instance.csvimport_id = csvimportid
-
-
-                #if model_instance:
-                #    try:
-                #        model_instance.__setattr__(field, row[column])
-                #    except:
-                #        try:
-                #            row[column] = model_instance.getattr(field).to_python(row[column])
-                #        except:
-                #            try:
-                #                row[column] = datetime(row[column])
-                #            except:
-                #                row[column] = None
-                #                loglist.append('Column %s failed' % field)
 
             #if self.defaults:
             #    for (field, value, foreignkey) in self.defaults:
@@ -379,60 +344,49 @@ class Command(LabelCommand):
             if self.deduplicate:
                 matchdict = {}
                 full_match = True
+                related_model_created = False
 
-                # Start with related model
+                # Determine if we are doing a full field match
+                # or only a subset of fields
                 if len(self.unique_related_fields) > 0:
+                    # Match on specified fields
                     full_match = False
                     for field in self.unique_related_fields:
                         matchdict[field] = related_model_fields[field]                   
-                else: # Match on all foreign key fields
+                else:
+                    # Match on all foreign key fields
                     for (column, field, foreignkey) in self.mappings:
                         if foreignkey:
                             matchdict[foreignkey[1]] = related_model_fields[field]
 
-                related_model_created = False
+                # Retrieve model if it exists, otherwise create it
                 try:
                     related_model_instance = self.fk_model.objects.get(**matchdict)
                 except self.fk_model.DoesNotExist:
                     related_model_instance = self.fk_model(**related_model_fields)
                     related_model_created = True
-                    try:
-                        related_model_instance.save()
-                        related_model_saved = True
-                    except DatabaseError, err:
-                        loglist.append('Database Error: {0}'.format(err))
+
                 except self.fk_model.MultipleObjectsReturned:
                     related_model_instance = self.fk_model.objects.filter(**matchdict)[0]
 
-                # If we only matched on a subset of fields, we need
-                # to update the model with the other fields
-                if not related_model_created:
-                    related_model_instance = self.fk_model(
-                        pk=related_model_instance.pk,
-                        **related_model_fields
-                    )
-                    try:
-                        related_model_instance.save(update_fields=related_model_fields.keys())
-                        related_model_saved = True
-                    except DatabaseError, err:
-                        loglist.append('Database Error: {0}'.format(err))
+                # If an existing model was found, updated it with the new data
+                if not related_model_created:    
+                    for field, value in related_model_fields.iteritems():
+                        setattr(related_model_instance, field, value)
+    
+            # Not doing deduplication
             else:
                 related_model_created = True
                 related_model_instance = self.fk_model(**related_model_fields)
-                try:
-                    related_model_instance.save()
-                    related_model_saved = True
-                except DatabaseError, err:
-                    loglist.append('Database Error: {0}'.format(err))
-
+    
             # Store the import id for later and save the model
             related_model_instance.csvimport_id = csvimportid
 
-            if not related_model_saved:
-                try:
-                    related_model_instance.save()
-                except DatabaseError, err:
-                    loglist.append('Database Error: {0}'.format(err))
+            # Save the model instance
+            try:
+                related_model_instance.save()
+            except DatabaseError, err:
+                loglist.append('Database Error: {0}'.format(err))
 
             # Ensure that the foreign key field is populated with
             # the correct related_model_instance
@@ -450,27 +404,18 @@ class Command(LabelCommand):
 
                 try:
                     model_instance = self.model.objects.get(**query)
-                    model_instance = self.model(
-                        pk=model_instance.pk,
-                        **main_model_fields
-                    )
-                    
-                    update_fields = []
-                    for one_mapping in main_model_fields.keys():
-                        update_fields.append(one_mapping)
-        
-                    model_instance.save(update_fields=update_fields)
-                    model_instance = self.model.objects.get(pk=model_instance.pk)
                 except self.model.DoesNotExist:
                     model_instance = None
                 except self.model.MultipleObjectsReturned:
                     model_instance = self.model.objects.filter(**query)[0]
 
+            # No main model was found for the existing related model instance,
+            # or the related_model instance was new
             if not model_instance:
-                # Now check main model
                 if self.deduplicate:
                     matchdict = {}
                     full_match = True
+                    created = False
 
                     # if we have unique fields, use only those for matching,
                     # otherwise use all fields
@@ -480,29 +425,29 @@ class Command(LabelCommand):
                             try:
                                 matchdict[field] = main_model_fields[field]
                             except KeyError:
-                                pass
+                                continue
                     else: # Match on all fields
                         for (column, field, foreignkey) in self.mappings:
                             try:
                                 matchdict[field] = main_model_fields[field]
                             except KeyError:
-                                pass
+                                continue
 
-                    created = False
                     try:
                         model_instance = self.model.objects.get(**matchdict)
                     except self.model.DoesNotExist:
-                        model_instance = self.model(**main_model_fields)
                         created = True
+                        model_instance = self.model(**main_model_fields)
 
                     if not created:
-                        model_instance = self.model(pk=model_instance.pk, **main_model_fields)
+                        for field, value in main_model_fields.iteritems():
+                            setattr(model_instance, field, value)
                 else:
                     model_instance = self.model(**main_model_fields)
 
-            # Save the model
             model_instance.csvimport_id = csvimportid
-            
+
+            # Save the model            
             try:
                 model_instance.save()
             except DatabaseError, err:
